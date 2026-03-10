@@ -14,7 +14,7 @@ if [[ -z "${CLAUDE_BIN}" ]]; then
   exit 1
 fi
 
-CRON_CMD="0 10 * * * cd ${SCRIPT_DIR} && ${CLAUDE_BIN} -p \"daily session warm-up: summarize any new TODOs in the current directory\" --output-format text >> ${LOG_DIR}/daily.log 2>&1"
+CRON_CMD="0 10 * * * cd ${SCRIPT_DIR} && CLAUDE_BIN=${CLAUDE_BIN} ${RESET_SCRIPT}"
 
 CURRENT_CRONTAB="$(crontab -l 2>/dev/null || true)"
 CLEANED_CRONTAB="$(printf '%s\n' "${CURRENT_CRONTAB}" | grep -v 'daily session warm-up: summarize any new TODOs in the current directory' || true)"

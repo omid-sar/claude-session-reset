@@ -19,7 +19,7 @@ chmod +x install.sh reset_session.sh
 What `install.sh` does:
 - Creates `~/claude-session-reset/logs` if missing.
 - Resolves the full path to `claude` using `command -v claude`.
-- Installs a cron entry at `0 10 * * *` using the resolved binary path.
+- Installs a cron entry at `0 10 * * *` that runs `reset_session.sh` with the resolved `claude` path.
 
 ## 3) Verify cron installation
 
@@ -30,7 +30,7 @@ crontab -l
 You should see an entry similar to:
 
 ```cron
-0 10 * * * cd /root/claude-session-reset && /usr/local/bin/claude -p "daily session warm-up: summarize any new TODOs in the current directory" --output-format text >> /root/claude-session-reset/logs/daily.log 2>&1
+0 10 * * * cd /root/claude-session-reset && CLAUDE_BIN=/usr/local/bin/claude /root/claude-session-reset/reset_session.sh
 ```
 
 ## 4) Manual test
