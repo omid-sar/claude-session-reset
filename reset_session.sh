@@ -7,5 +7,6 @@ LOG_FILE="${LOG_DIR}/daily.log"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 
 mkdir -p "${LOG_DIR}"
+cd "${REPO_DIR}"
 
 "${CLAUDE_BIN}" -p "daily session warm-up: summarize any new TODOs in the current directory" --output-format text >> "${LOG_FILE}" 2>&1

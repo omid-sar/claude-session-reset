@@ -18,15 +18,20 @@ jobs:
           script: |
             set -euo pipefail
             REPO_DIR="$HOME/claude-session-reset"
+            GH_TOKEN="${{ secrets.HETZNER_GITHUB_TOKEN }}"
             REPO_URL="https://github.com/${{ github.repository }}.git"
+
+            if [ -n "$GH_TOKEN" ]; then
+              REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+            fi
 
             if [ ! -d "$REPO_DIR/.git" ]; then
               git clone "$REPO_URL" "$REPO_DIR"
             fi
 
             cd "$REPO_DIR"
-            git fetch --all --prune
+            git remote set-url origin "$REPO_URL"
             git checkout main
-            git reset --hard origin/main
+            git pull --ff-only origin main
             chmod +x install.sh reset_session.sh
             ./install.sh

@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${SCRIPT_DIR}/logs"
 RESET_SCRIPT="${SCRIPT_DIR}/reset_session.sh"
+CRON_TZ_VALUE="America/Toronto"
+CRON_SCHEDULE="0 5 * * *"
 
 mkdir -p "${LOG_DIR}"
 chmod +x "${RESET_SCRIPT}"
@@ -14,15 +16,21 @@ if [[ -z "${CLAUDE_BIN}" ]]; then
   exit 1
 fi
 
-CRON_CMD="0 10 * * * cd ${SCRIPT_DIR} && CLAUDE_BIN=${CLAUDE_BIN} ${RESET_SCRIPT}"
+CRON_CMD="${CRON_SCHEDULE} cd ${SCRIPT_DIR} && CLAUDE_BIN=${CLAUDE_BIN} ${RESET_SCRIPT}"
 
 CURRENT_CRONTAB="$(crontab -l 2>/dev/null || true)"
-CLEANED_CRONTAB="$(printf '%s\n' "${CURRENT_CRONTAB}" | grep -v 'daily session warm-up: summarize any new TODOs in the current directory' || true)"
+CLEANED_CRONTAB="$(
+  printf '%s\n' "${CURRENT_CRONTAB}" \
+    | grep -v 'reset_session.sh' \
+    | grep -v "^CRON_TZ=${CRON_TZ_VALUE}$" \
+    || true
+)"
 
 {
   printf '%s\n' "${CLEANED_CRONTAB}"
+  printf '%s\n' "CRON_TZ=${CRON_TZ_VALUE}"
   printf '%s\n' "${CRON_CMD}"
 } | awk 'NF || !x++' | crontab -
 
-echo "Installed daily reset cron job at 10:00 UTC."
+echo "Installed daily reset cron job at 5:00 AM ${CRON_TZ_VALUE}."
 crontab -l
