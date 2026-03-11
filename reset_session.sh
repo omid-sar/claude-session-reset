@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${SCRIPT_DIR}/logs"
-LOG_FILE="${LOG_DIR}/daily.log"
+LOG_FILE="${LOG_FILE:-${LOG_DIR}/daily.log}"
 CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 
 mkdir -p "${LOG_DIR}"
