@@ -22,6 +22,8 @@ CRON_CMD_1="${CRON_SCHEDULE_1} cd ${SCRIPT_DIR} && CLAUDE_BIN=${CLAUDE_BIN} ${RE
 CRON_CMD_2="${CRON_SCHEDULE_2} cd ${SCRIPT_DIR} && CLAUDE_BIN=${CLAUDE_BIN} ${RESET_SCRIPT}"
 CRON_CMD_A2_1="${CRON_SCHEDULE_1} ${SCRIPT_DIR}/reset_session_account2.sh"
 CRON_CMD_A2_2="${CRON_SCHEDULE_2} ${SCRIPT_DIR}/reset_session_account2.sh"
+CRON_CMD_A3_1="${CRON_SCHEDULE_1} ${SCRIPT_DIR}/reset_session_account3.sh"
+CRON_CMD_A3_2="${CRON_SCHEDULE_2} ${SCRIPT_DIR}/reset_session_account3.sh"
 
 CURRENT_CRONTAB="$(crontab -l 2>/dev/null || true)"
 CLEANED_CRONTAB="$(
@@ -37,6 +39,8 @@ CLEANED_CRONTAB="$(
   printf '%s\n' "${CRON_CMD_2}"
   printf '%s\n' "${CRON_CMD_A2_1}"
   printf '%s\n' "${CRON_CMD_A2_2}"
+  printf '%s\n' "${CRON_CMD_A3_1}"
+  printf '%s\n' "${CRON_CMD_A3_2}"
 } | awk 'NF || !x++' | crontab -
 
 echo "Installed cron jobs: 5:00 AM and 10:02 AM Toronto EDT."
