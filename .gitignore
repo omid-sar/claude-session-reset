@@ -1,0 +1,6 @@
+# Private deployment notes — never commit (server IPs, accounts, PHI context)
+DEPLOYMENT_NOTES.local.md
+*.local.md
+
+# Runtime keepalive logs
+logs/*.log

@@ -1,166 +1,180 @@
-# Deployment runbook — new server (Helsinki)
+# Deployment runbook
 
-Step-by-step setup for the keepalive scheduler on the **new** server.
+Set up the **Claude Code + Codex CLI** keepalive scheduler on a fresh server.
+Replace `<SERVER_IP>` and `<DEPLOY_USER>` with your own values.
 
 | Thing | Value |
 |-------|-------|
-| Server IP | `62.238.42.138` (Hetzner CX43 "gp-automation", Helsinki) |
-| Dedicated user | `aiwarm` (unprivileged, isolated from Oscar EMR) |
+| Server | `<SERVER_IP>` |
+| Deploy user | `<DEPLOY_USER>` — a dedicated, unprivileged user |
 | Repo | `omid-sar/claude-session-reset` (public) |
 | Schedule | 5:00 AM + 10:02 AM Toronto EDT (`09:00` + `14:02` UTC) |
 
-> ⚠️ This box also runs **Oscar EMR** (patient data / PHI). Everything below runs as the
-> unprivileged `aiwarm` user, which has **no access to EMR data**. Never run `claude`/`codex`
-> from inside the Oscar directories, and keep the keepalive prompts fixed.
+> **Security.** If this server also runs other sensitive or regulated workloads, run this
+> automation under a **dedicated unprivileged user** that has no access to that data, and keep the
+> keepalive prompts fixed and harmless. Don't point `claude`/`codex` at directories holding
+> sensitive data. (Your real server IP and any such context belong in a private file, **not** in
+> this public repo — see `DEPLOYMENT_NOTES.local.md`, which is gitignored.)
 
 ---
 
-## How deployment actually works
+## How deployment works
 
-"The scheduler" = **cron jobs on the server**. They only exist after `install.sh` runs *on the
-server*. There are two ways to get there:
+"The scheduler" = **cron jobs on the server**. They exist only after `install.sh` runs *on the
+server*. Two ways to get there:
 
-- **Route B — manual (this is what was done on the old server).** SSH in, install, log in, run
-  `install.sh`. Simple, no secrets needed. **Recommended to start.**
-- **Route A — GitHub auto-deploy.** Set 3 GitHub secrets; then every push to `main` SSHes into the
-  server and re-runs `install.sh` automatically. (As of now this repo has **zero** secrets, so
-  auto-deploy has never run — that's why the old box was set up by hand.)
+- **Route B — manual.** SSH in, install, log in, run `install.sh`. Simplest; this is how it's set
+  up today. **Recommended.**
+- **Route A — GitHub auto-deploy.** Set 3 GitHub secrets; then every push to `main` SSHes in and
+  re-runs `install.sh` automatically.
 
-You still log in to `claude`/`codex` on the server **once** in *both* routes — an interactive
-sign-in can't be automated.
+You log in to `claude`/`codex` on the server **once** in *both* routes — an interactive sign-in
+can't be automated.
 
 ---
 
-## Route B — manual setup (do this first)
+## Route B — manual setup
 
-### 1. SSH into the server as root (or your sudo user) and create the dedicated user
+### 1. SSH in and create the dedicated user (as root/sudo)
 
 ```bash
-ssh root@62.238.42.138
-
-adduser --disabled-password --gecos "" aiwarm
-# (optional) give it a password if you want to su into it: passwd aiwarm
+ssh root@<SERVER_IP>
+adduser --disabled-password --gecos "" <DEPLOY_USER>
 ```
 
-### 2. Become `aiwarm` and install the CLIs
+### 2. Become the user and install Node (via nvm)
 
 ```bash
-sudo -iu aiwarm        # become the dedicated user
-
-# Node.js (skip if already installed for this user). Example via nvm:
+sudo -iu <DEPLOY_USER>
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 . ~/.nvm/nvm.sh && nvm install --lts
+```
 
+> nvm installs `node`/`npm` (and later `claude`/`codex`) under
+> `~/.nvm/versions/node/<version>/bin/`. That's a long path, but `install.sh` finds the binaries
+> automatically with `command -v` — you don't need to type the path anywhere.
+
+### 3. Install the CLIs
+
+```bash
 npm install -g @anthropic-ai/claude-code @openai/codex
 ```
 
-### 3. Log in to each account (interactive — only you can do this)
+### 4. Log in (interactive — only a human can do this)
 
 ```bash
-claude login                                  # Claude account 1
-CLAUDE_CONFIG_DIR=~/.claude-account2 claude login   # account 2
-CLAUDE_CONFIG_DIR=~/.claude-account3 claude login   # account 3
-codex login                                   # Codex account 1
+claude login
+codex login
 ```
 
-### 4. Clone and install the cron jobs
+> **Gotcha we hit:** `claude login` / `codex login` may drop you straight into the program's
+> full-screen chat. If the top of the screen already shows your account (e.g. "Welcome back …",
+> a model name), you're **already signed in** — just leave: type `/exit` and Enter, or press
+> **Ctrl+C twice**, to get back to the shell.
+>
+> Optional extra Claude accounts:
+> ```bash
+> CLAUDE_CONFIG_DIR=~/.claude-account2 claude login
+> CLAUDE_CONFIG_DIR=~/.claude-account3 claude login
+> ```
+
+### 5. Clone and install the schedule
 
 ```bash
 git clone https://github.com/omid-sar/claude-session-reset.git ~/claude-session-reset
 cd ~/claude-session-reset
-./install.sh
+./install.sh        # prints: Installed cron jobs (claude x3 + codex): 5:00 AM and 10:02 AM ...
 ```
 
-### 5. Verify
+### 6. Prove it works (run the exact command cron will run)
 
 ```bash
-crontab -l                                    # should list 8 entries (claude x3 + codex)
-
 bash ~/claude-session-reset/reset_session.sh && tail ~/claude-session-reset/logs/daily.log
 bash ~/claude-session-reset/reset_session_codex.sh && tail ~/claude-session-reset/logs/codex.log
+crontab -l          # should list 8 scheduled lines
 ```
 
-If the last two print `OK …` (not an error), the scheduler is live. **You're done.**
+Each of the first two should print a line containing **`OK`** and a UTC time. Because that's the
+identical command cron runs each morning (same user, same paths), a success here guarantees the
+schedule works. **Done.**
 
 ---
 
-## Route A — wire up GitHub auto-deploy (optional, do after Route B works)
+## Route A — GitHub auto-deploy (optional, do after Route B works)
 
-This is the part about "pulling the keys and putting them in place." You create one SSH keypair:
-the **public** half goes on the server (authorizes login), the **private** half goes into a GitHub
-secret (lets the Action log in).
+You create one SSH keypair: the **public** half goes on the server (authorizes login), the
+**private** half goes into a GitHub secret (lets the Action log in).
 
 ### A1. Create a dedicated deploy keypair — on your LOCAL machine
 
 ```bash
-ssh-keygen -t ed25519 -C "gp-automation-deploy" -f ~/.ssh/gp_automation_deploy -N ""
+ssh-keygen -t ed25519 -C "keepalive-deploy" -f ~/.ssh/keepalive_deploy -N ""
 ```
 
-- `~/.ssh/gp_automation_deploy`     ← **private** key (goes into the GitHub secret)
-- `~/.ssh/gp_automation_deploy.pub` ← **public** key (goes on the server)
-- `-N ""` = no passphrase — **required**, because the Action logs in non-interactively.
+- `~/.ssh/keepalive_deploy`     ← **private** key → GitHub secret
+- `~/.ssh/keepalive_deploy.pub` ← **public** key → server
+- `-N ""` = no passphrase — **required**, the Action logs in non-interactively.
 
-### A2. Put the PUBLIC key on the server (authorize `aiwarm`)
+> Don't reuse a **personal** SSH key (one that also unlocks your GitHub account or other servers)
+> as the deploy secret — make a dedicated key so the blast radius is just `<DEPLOY_USER>`.
 
-Print it locally and copy the single line:
+### A2. Put the PUBLIC key on the server (authorize `<DEPLOY_USER>`)
+
+Print it locally, copy the single line:
 
 ```bash
-cat ~/.ssh/gp_automation_deploy.pub
+cat ~/.ssh/keepalive_deploy.pub
 ```
 
-Then on the SERVER (as root/sudo), append it to `aiwarm`'s authorized keys:
+On the SERVER (as root/sudo):
 
 ```bash
-mkdir -p /home/aiwarm/.ssh
-echo 'PASTE_THE_PUBLIC_KEY_LINE_HERE' >> /home/aiwarm/.ssh/authorized_keys
-chmod 700 /home/aiwarm/.ssh
-chmod 600 /home/aiwarm/.ssh/authorized_keys
-chown -R aiwarm:aiwarm /home/aiwarm/.ssh
+mkdir -p /home/<DEPLOY_USER>/.ssh
+echo 'PASTE_THE_PUBLIC_KEY_LINE_HERE' >> /home/<DEPLOY_USER>/.ssh/authorized_keys
+chmod 700 /home/<DEPLOY_USER>/.ssh
+chmod 600 /home/<DEPLOY_USER>/.ssh/authorized_keys
+chown -R <DEPLOY_USER>:<DEPLOY_USER> /home/<DEPLOY_USER>/.ssh
 ```
 
-Test the key from your LOCAL machine (should print `connected as aiwarm`):
+Test from your LOCAL machine (should print `connected as <DEPLOY_USER>`):
 
 ```bash
-ssh -i ~/.ssh/gp_automation_deploy aiwarm@62.238.42.138 'echo connected as $(whoami)'
+ssh -i ~/.ssh/keepalive_deploy <DEPLOY_USER>@<SERVER_IP> 'echo connected as $(whoami)'
 ```
 
 ### A3. Put the keys into GitHub secrets
 
-Using the `gh` CLI (logged in as `omid-sar`):
-
 ```bash
-gh secret set HETZNER_HOST    --repo omid-sar/claude-session-reset --body "62.238.42.138"
-gh secret set HETZNER_USER    --repo omid-sar/claude-session-reset --body "aiwarm"
-gh secret set HETZNER_SSH_KEY --repo omid-sar/claude-session-reset < ~/.ssh/gp_automation_deploy
+gh secret set HETZNER_HOST    --repo omid-sar/claude-session-reset --body "<SERVER_IP>"
+gh secret set HETZNER_USER    --repo omid-sar/claude-session-reset --body "<DEPLOY_USER>"
+gh secret set HETZNER_SSH_KEY --repo omid-sar/claude-session-reset < ~/.ssh/keepalive_deploy
 ```
 
-> The third command pipes the **private key file** in as the secret value. Use the file **without**
-> `.pub`. `HETZNER_GITHUB_TOKEN` is **not** needed — the repo is public.
-
-Or via the web UI: repo → **Settings → Secrets and variables → Actions → New repository secret**,
-and add the three names above (paste the full private key, including the
-`-----BEGIN/END OPENSSH PRIVATE KEY-----` lines, for `HETZNER_SSH_KEY`).
-
-Confirm they exist:
-
-```bash
-gh secret list --repo omid-sar/claude-session-reset
-```
+> The third command pipes the **private key file** in as the secret value (the one **without**
+> `.pub`). `HETZNER_GITHUB_TOKEN` is not needed — the repo is public.
+> Or use the web UI: repo → **Settings → Secrets and variables → Actions → New repository secret**.
 
 ### A4. Trigger a deploy
 
 ```bash
-git push origin main            # any push to main runs .github/workflows/deploy.yml
+git push origin main      # any push to main runs .github/workflows/deploy.yml
 ```
 
-Watch it: repo → **Actions** tab, or `gh run watch`. On success it has SSH'd in, pulled, and
-re-run `install.sh` for you.
+Watch it under the repo's **Actions** tab. On success it has SSH'd in, pulled, and re-run
+`install.sh`.
 
 ---
 
-## Security notes (PHI server)
+## Notes & gotchas (real things we ran into)
 
-- The deploy key authorizes **only `aiwarm`**, which is unprivileged and isolated from Oscar/EMR
-  data — keep it that way (don't add this key to `root`).
-- Keep `-N ""` (no passphrase) only for this dedicated deploy key; don't reuse a personal key.
-- The keepalive jobs only send a fixed harmless prompt; they never read files or patient data.
+- **Login lands in the full-screen chat.** Exit with `/exit` or Ctrl+C twice (see step 4).
+- **nvm path is long** but `install.sh` resolves `claude`/`codex` via `command -v` — no manual paths.
+- **`account2` / `account3` Claude jobs are scheduled by default.** Only sign in the accounts you
+  actually use; any account that isn't logged in just writes a harmless error each morning. If you
+  use only one Claude account, remove the `account2`/`account3` cron lines from `install.sh`.
+- **Codex is agentic.** To answer "what's the current time" it may run a quick `date` command. It's
+  harmless and read-only. If you want it to run **no** commands at all, change the prompt in
+  `reset_session_codex.sh` to a plain `"reply with the single word OK"`.
+- **DST:** the cron times are fixed in UTC (`09:00` / `14:02`), which equals 5:00 / 10:02 AM Toronto
+  during **EDT** (summer). In **EST** (winter) those become 4:00 / 9:02 AM Toronto. Adjust if you
+  need exact local times year-round.

@@ -2,13 +2,13 @@
 
 Runs daily warm-ups for **Claude Code** (3 accounts) and the **OpenAI Codex CLI** (1 account) on a server, at **5:00 AM and 10:02 AM Toronto time** (`America/Toronto`, EDT). Each run sends a single harmless keepalive prompt to keep the session/quota window active — it never reads files or touches application data.
 
-> ⚠️ **PHI note.** The target server (`62.238.42.138`, Hetzner CX43 "gp-automation", Helsinki) also runs **Oscar EMR** with real patient data for an Ontario GP. Run this automation under a **dedicated unprivileged user**, isolated from the EMR. Keep keepalive prompts fixed and harmless, and never point `claude`/`codex` at EMR directories.
+> ⚠️ **Security note.** If your server also runs other sensitive or regulated workloads, run this automation under a **dedicated unprivileged user** that has no access to that data. Keep the keepalive prompts fixed and harmless, and never point `claude`/`codex` at directories holding sensitive data. (Keep your real server IP and any such context in a private file like `DEPLOYMENT_NOTES.local.md` — gitignored — not in this public repo.)
 
 ## 0) Prerequisites on server
 
 ### 0a) Create a dedicated, unprivileged user (recommended)
 
-Because this box also runs Oscar EMR, run the keepalive as its own user with no access to EMR data:
+If this box also runs other sensitive workloads, run the keepalive as its own user with no access to that data:
 
 ```bash
 sudo adduser --disabled-password --gecos "" aiwarm
@@ -103,7 +103,7 @@ Authenticate it once with `CODEX_HOME=~/.codex-account2 codex login`, then add c
 On every push to `main`, the workflow SSHes into the server and re-runs `install.sh`. Point these at the **new** server:
 
 Required:
-- `HETZNER_HOST` — `62.238.42.138` (new Helsinki server)
+- `HETZNER_HOST` — your server's IP address
 - `HETZNER_USER` — the dedicated user (e.g. `aiwarm`)
 - `HETZNER_SSH_KEY` — private key authorized for that user
 
